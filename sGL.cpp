@@ -218,19 +218,16 @@ void sGLSetPixel(int x, int y, float z, color_t color)
 	}
 }
 
-void sGLScanLine(int x0, int y0, int x1, int y1, in_out_pixel_t * tris)
+void sGLScanLine(int x0, int x1, int y, in_out_pixel_t * tris)
 {
-	// Taken from http://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm#C
-
 	// We determine which Pixels need to be drawn by Scanning each line in the
 	// Triangle.
 
-	int dx = abs(x1 - x0), sx = x0<x1 ? 1 : -1;
-	int dy = abs(y1 - y0), sy = y0<y1 ? 1 : -1;
-	int err = (dx>dy ? dx : -dy) / 2, e2;
+	int sx = x0 < x1 ? x0 : x1;
+	int ex = x0 < x1 ? x1 : x0;
 
-	for (;;){
-
+	for (int xx = sx; xx <= ex; ++xx)
+	{
 		in_out_pixel_t currentPixel;
 		float u, v, w;
 
@@ -238,10 +235,10 @@ void sGLScanLine(int x0, int y0, int x1, int y1, in_out_pixel_t * tris)
 		// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
 		// Which are helpful for interpolation inside the Triangle
 
-		calculateBarycentric(x0, y0, tris, &u, &v, &w);
+		calculateBarycentric(xx, y, tris, &u, &v, &w);
 
-		currentPixel.x = x0;
-		currentPixel.y = y0;
+		currentPixel.x = xx;
+		currentPixel.y = y;
 
 		// We can then interpolate the Color across the Triangle, as well as the 
 		// actual u and v texture mapping
@@ -258,11 +255,6 @@ void sGLScanLine(int x0, int y0, int x1, int y1, in_out_pixel_t * tris)
 		// And finally draw the last Pixel onto the Back Buffer
 		// Continue on at - sGLSetPixel -
 		sGLSetPixel(currentPixel.x, currentPixel.y, currentPixel.z, currentPixel.color);
-
-		if (x0 == x1 && y0 == y1) break;
-		e2 = err;
-		if (e2 >-dx) { err -= dy; x0 += sx; }
-		if (e2 < dy) { err += dx; y0 += sy; }
 	}
 }
 
@@ -279,7 +271,7 @@ void sGLFillTopFlatTriangle(int * xx, int * yy, in_out_pixel_t * tris)
 	{
 		curx1 -= invslope1;
 		curx2 -= invslope2;
-		sGLScanLine((int)curx1, scanlineY, (int)curx2, scanlineY, tris);
+		sGLScanLine((int)curx1, (int)curx2, scanlineY, tris);
 	}
 }
 
@@ -295,7 +287,7 @@ void sGLFillBottomFlatTriangle(int * xx, int * yy, in_out_pixel_t * tris)
 
 	for (int scanlineY = yy[0]; scanlineY <= yy[1]; scanlineY++)
 	{
-		sGLScanLine((int)curx1, scanlineY, (int)curx2, scanlineY, tris);
+		sGLScanLine((int)curx1, (int)curx2, scanlineY, tris);
 		curx1 += invslope1;
 		curx2 += invslope2;
 	}
