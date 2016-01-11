@@ -1,33 +1,16 @@
-
-
-struct point2_t
-{
-	int x;
-	int y;
-
-	float dotProduct(point2_t otherVector)
-	{
-		return (float) (x * otherVector.x + y * otherVector.y);
-	}
-
-	point2_t(int xx, int yy)
-	{
-		x = xx;
-		y = yy;
-	}
-};
-
 struct color_t
 {
 	float r;
 	float g;
 	float b;
+	float a;
 
 	color_t(float rr, float gg, float bb)
 	{
 		r = rr;
 		g = gg;
 		b = bb;
+		a = 1.0f;
 	}
 
 	color_t()
@@ -41,6 +24,7 @@ struct in_out_vertex_t
 	float x;
 	float y;
 	float z;
+	float w;
 
 	float u;
 	float v;
@@ -52,6 +36,7 @@ struct in_out_vertex_t
 		x = xx;
 		y = yy;
 		z = zz;
+		w = 1.0f;
 		u = uu;
 		v = vv;
 		color.r = rr;
@@ -59,16 +44,12 @@ struct in_out_vertex_t
 		color.b = bb;
 	}
 
-	in_out_vertex_t(float xx, float yy, float zz, float rr, float gg, float bb)
-	{
-		in_out_vertex_t(xx, yy, zz, 0.0f, 0.0f, rr, gg, bb);
-	}
-
 	in_out_vertex_t()
 	{
-		in_out_vertex_t(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+		in_out_vertex_t(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 	}
 };
+
 
 struct in_out_pixel_t
 {
@@ -85,6 +66,11 @@ struct in_out_pixel_t
 };
 
 
+/* --------------------------- You can safely ignore everything below this line --------------------------*/
+
+#include <SDL.h>
+
+
 // Just some forward declarations
 void sGLInit(int windowWidth, int windowHeight);
 void sGLSetPixel(int x, int y, Uint32 color);
@@ -94,39 +80,75 @@ void sGLBindBuffer(int bufferID);
 void sGLBufferData(int size, in_out_vertex_t * vertexData);
 void sGLClearDepth(float zz);
 void sGLEnableDepthTest();
+void sGLEnableAlphaTest();
+void sGLDisableAlphaTest();
 void sGLUseVertexShader(in_out_vertex_t(*inVS)(in_out_vertex_t));
 void sGLUsePixelShader(in_out_pixel_t(*inPS)(in_out_pixel_t));
+void sGLUniform1f(float * location, float value);
 void sGLSwapBuffers();
 void sGLClear();
 void sGLExit();
 bool isRunning();
 
 
-/* --------------------------- You can safely ignore everything below this line --------------------------*/
+struct point2_t
+{
+	int x;
+	int y;
+
+	float dotProduct(point2_t otherVector)
+	{
+		return (float)(x * otherVector.x + y * otherVector.y);
+	}
+
+	point2_t(int xx, int yy)
+	{
+		x = xx;
+		y = yy;
+	}
+};
 
 
+// More Globals, WOHOOO!
 
 SDL_Window * g_SDLWindow;
 SDL_Renderer * g_SDLRenderer;
 SDL_Texture * g_SDLTexture;
+Uint32 * g_SDLBackBuffer;
 int g_SDLWidth;
+int g_SDLHeight;
 
 void SDLStart(int windowWidth, int windowHeight)
 {
 	SDL_Init(SDL_INIT_VIDEO);
 
 	g_SDLWidth = windowWidth;
+	g_SDLHeight = windowHeight;
 
 	g_SDLWindow = SDL_CreateWindow("stupidGL", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, windowWidth, windowHeight, 0);
 
 	g_SDLRenderer = SDL_CreateRenderer(g_SDLWindow, -1, 0);
 	g_SDLTexture = SDL_CreateTexture(g_SDLRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, windowWidth, windowHeight);
 
+	g_SDLBackBuffer = new Uint32[windowWidth * windowHeight];
 }
 
-void SDLSwapBuffers(Uint32 * backbuffer)
+void SDLSwapBuffers(color_t * backbuffer)
 {
-	SDL_UpdateTexture(g_SDLTexture, NULL, backbuffer, g_SDLWidth * sizeof(Uint32));
+	for (int i = 0; i < g_SDLHeight; ++i)
+	{
+		for (int j = 0; j < g_SDLWidth; ++j)
+		{
+			// Convert color_t to Uint32
+			Uint32 iColor = ((uint8_t)(255.0f * backbuffer[i * g_SDLWidth + j].b) << 16) |
+				((uint8_t)(255.0f * backbuffer[i * g_SDLWidth + j].g) << 8) |
+				((uint8_t)(255.0f * backbuffer[i * g_SDLWidth + j].r)) & 0xffffff;
+
+			g_SDLBackBuffer[i * g_SDLWidth + j] = iColor;
+		}
+	}
+
+	SDL_UpdateTexture(g_SDLTexture, NULL, g_SDLBackBuffer, g_SDLWidth * sizeof(Uint32));
 	SDL_RenderClear(g_SDLRenderer);
 	SDL_RenderCopy(g_SDLRenderer, g_SDLTexture, NULL, NULL);
 	SDL_RenderPresent(g_SDLRenderer);
@@ -134,6 +156,8 @@ void SDLSwapBuffers(Uint32 * backbuffer)
 
 void SDLEnd()
 {
+	delete[] g_SDLBackBuffer;
+
 	SDL_DestroyTexture(g_SDLTexture);
 	SDL_DestroyRenderer(g_SDLRenderer);
 	SDL_DestroyWindow(g_SDLWindow);
@@ -144,7 +168,7 @@ bool isRunning()
 {
 	SDL_Event sEvent;
 
-	SDL_WaitEvent(&sEvent);
+	SDL_PollEvent(&sEvent);
 
 	switch (sEvent.type)
 	{

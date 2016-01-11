@@ -1,14 +1,13 @@
 
 // You will require the SDL2 Library to Compile
-// SDL2 is only used to draw Pixels on the Screen.
+// SDL2 is _ONLY_ used to draw the Backbuffer on the Screen.
 // Everything "3D" is done in our Software Rasterizer "sGL" below
 
 // NOTE: This is not meant to run at any usable Framerate!
 
 // - Michael Kissner (@Spellwrath)
 
-#include <SDL.h>
-#include <iostream>
+#include <math.h>
 
 #include "sGLHelper.h"
 
@@ -27,14 +26,42 @@ color_t g_TextureSampler[TEXTURE_SIZE][TEXTURE_SIZE] = {
 	{ BLACK, BLACK, WHITE, WHITE, BLACK, BLACK },
 };
 
+// "uniforms"
+float fRotation = 0.0f;
+
+
 in_out_vertex_t vertexShader(in_out_vertex_t inVertex)
 {
+	in_out_vertex_t tempV;
 	in_out_vertex_t out = inVertex;
 
-	// Just a simple Vertex Shader that slightly Scales the Vertices
-	out.x = out.x * 1.5f;
-	out.y = out.y * 2.0f;
-	out.z = 2.0f;
+	// WORLD - Transformation
+
+	// Just a simple rotation of the Vertices
+	tempV.x = inVertex.z * sin(fRotation) + inVertex.x * cos(fRotation);
+	tempV.y = inVertex.y;
+	tempV.z = inVertex.z * cos(fRotation) - inVertex.x * sin(fRotation);
+
+
+
+	// VIEW - Transformation
+
+	// Move the "Camera" back a bit so that the Triangles are in full view
+	tempV.z = tempV.z + 0.5f;
+
+
+
+	// PROJECTION - Transformation
+	
+	// Quick and dirty "projection" to get a quasi-perspective look.
+	float ftan = tan(1.5707f / 2.0f) / (tempV.z);
+	out.x = tempV.x * ftan;
+	out.y = tempV.y * ftan;
+	out.z = tempV.z;
+	out.w = 1 / out.z;
+
+	// And blend by depth - because we can.
+	out.color.a = 1.0f - out.z;
 
 	return out;
 }
@@ -42,15 +69,11 @@ in_out_vertex_t vertexShader(in_out_vertex_t inVertex)
 
 in_out_pixel_t pixelShader(in_out_pixel_t inPixel)
 {
-	in_out_pixel_t out;
+	in_out_pixel_t out = inPixel;
 
-	out.x = inPixel.x;
-	out.y = inPixel.y;
-
+	// We Point "sample" the Texture
 	int texU = (int)(inPixel.u * TEXTURE_SIZE);
 	int texV = (int)(inPixel.v * TEXTURE_SIZE);
-
-	// We "sample" the Texture
 	out.color = g_TextureSampler[texU][texV];
 
 	// ... and overlay the Vertex Color
@@ -58,28 +81,28 @@ in_out_pixel_t pixelShader(in_out_pixel_t inPixel)
 	out.color.g = out.color.g * inPixel.color.g;
 	out.color.b = out.color.b * inPixel.color.b;
 
+	out.color.a = inPixel.color.a;
+
 	return out;
 }
+
 
 /* ----------------------------------------------- The Main Loop------------------------------------------*/
 
 
 int main(int argc, char ** argv)
 {
-	// This might all look intentionally familiar if you have experience with OpenGL.
-
 	sGLInit(640, 480);
 
 	in_out_vertex_t vertices[6] =
 	{
-		in_out_vertex_t(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f),
-		in_out_vertex_t(0.5f, -0.4f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f),
-		in_out_vertex_t(0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
-
-
-		in_out_vertex_t(-0.5f, 0.7f, 0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f),
-		in_out_vertex_t(-0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f),
-		in_out_vertex_t(0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
+		in_out_vertex_t(-0.3f, -0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f),
+		in_out_vertex_t(0.3f, -0.3f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f),
+		in_out_vertex_t(0.3f, 0.3f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
+		
+		in_out_vertex_t(-0.3f, 0.3f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f),
+		in_out_vertex_t(-0.3f, -0.3f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f),
+		in_out_vertex_t(0.3f, 0.3f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f),
 	};
 
 	int bufferID;
@@ -91,16 +114,36 @@ int main(int argc, char ** argv)
 	sGLClearDepth(1.0f);
 	sGLEnableDepthTest();
 
+	float rotateScene = 0.0f;
+
 	while (isRunning())
 	{
 		sGLClear();
+
 
 		sGLBindBuffer(bufferID);
 
 		sGLUseVertexShader(vertexShader);
 		sGLUsePixelShader(pixelShader);
 
+
+
+		sGLDisableAlphaTest();
+
+		sGLUniform1f(&fRotation, 0.0f);
+
 		sGLDrawElements(2);
+
+
+
+		sGLEnableAlphaTest();
+
+		rotateScene = rotateScene + 0.01f;
+		sGLUniform1f(&fRotation, rotateScene);
+
+		sGLDrawElements(2);
+
+
 
 		sGLSwapBuffers();
 	}
@@ -117,7 +160,7 @@ int main(int argc, char ** argv)
 // For this, assume that all these things are present on the Graphics Card instead
 // For ease of Programming, I've made them all globals
 
-Uint32 * g_sGLBackBuffer;
+color_t * g_sGLBackBuffer;
 float * g_sGLDepthBuffer;
 int g_sGLBackbufferWidth;
 int g_sGLBackbufferHeight;
@@ -130,6 +173,8 @@ in_out_vertex_t *g_sGLVertexBuffer[32];
 int g_sGLNumBuffers = 0;
 int g_sGLBoundBuffer = 0;
 
+bool g_sGLAlphaTest = false;
+
 bool g_sGLDepthTest = false;
 float g_sGLDepthClear = 1.0f;
 
@@ -140,9 +185,8 @@ void sGLInit(int windowWidth, int windowHeight)
 	// Create the SDL things... not of interest
 	SDLStart(windowWidth, windowHeight);
 
-
 	// Let's create our Backbuffer
-	g_sGLBackBuffer = new Uint32[windowWidth * windowHeight];
+	g_sGLBackBuffer = new color_t[windowWidth * windowHeight];
 	g_sGLDepthBuffer = new float[windowWidth * windowHeight];
 
 	g_sGLBackbufferWidth = windowWidth;
@@ -187,6 +231,17 @@ void sGLEnableDepthTest()
 	g_sGLDepthTest = true;
 }
 
+void sGLEnableAlphaTest()
+{
+	g_sGLAlphaTest = true;
+}
+
+void sGLDisableAlphaTest()
+{
+	g_sGLAlphaTest = false;
+}
+
+
 void sGLUseVertexShader(in_out_vertex_t(*inVS)(in_out_vertex_t))
 {
 	g_sGLVertexShader = inVS;
@@ -197,21 +252,39 @@ void sGLUsePixelShader(in_out_pixel_t(*inPS)(in_out_pixel_t))
 	g_sGLPixelShader = inPS;
 }
 
+void sGLUniform1f(float * location, float value)
+{
+	// Fake setting of uniforms
+	(*location) = value;
+}
+
 void sGLSetPixel(int x, int y, float z, color_t color)
 {
-	Uint32 iColor = ((uint8_t)(255.0f * color.b) << 16) |
-		((uint8_t)(255.0f * color.g) << 8) |
-		((uint8_t)(255.0f * color.r)) & 0xffffff;
-
 	// We check if we are actually setting the Pixel inside the Backbuffer
 	if (x >= 0 && x < g_sGLBackbufferWidth)
 	{
 		if (y >= 0 && y < g_sGLBackbufferHeight)
 		{
-			// Finally, we check if we violate the Depth Buffer
-			if (z <= g_sGLDepthBuffer[y * g_sGLBackbufferWidth + x])
+			// We check if we violate the Depth Buffer
+			if (z > 0 && z <= g_sGLDepthBuffer[y * g_sGLBackbufferWidth + x] || g_sGLDepthTest == false)
 			{
-				g_sGLBackBuffer[y * g_sGLBackbufferWidth + x] = iColor;
+				// And finally Alpha blending
+
+				if (g_sGLAlphaTest == true)
+				{
+					color_t cCol = g_sGLBackBuffer[y * g_sGLBackbufferWidth + x];
+
+					cCol.r = cCol.r * (1 - color.a) + color.r * color.a;
+					cCol.g = cCol.g * (1 - color.a) + color.g * color.a;
+					cCol.b = cCol.b * (1 - color.a) + color.b * color.a;
+
+					g_sGLBackBuffer[y * g_sGLBackbufferWidth + x] = cCol;
+				}
+				else
+				{
+					g_sGLBackBuffer[y * g_sGLBackbufferWidth + x] = color;
+				}
+
 				g_sGLDepthBuffer[y * g_sGLBackbufferWidth + x] = z;
 			}
 		}
@@ -226,28 +299,41 @@ void sGLScanLine(int x0, int x1, int y, in_out_pixel_t * tris)
 	int sx = x0 < x1 ? x0 : x1;
 	int ex = x0 < x1 ? x1 : x0;
 
-	for (int xx = sx; xx <= ex; ++xx)
+	// sx = left edge --- ex = right edge of the current Scanline
+	for (int x = sx; x <= ex; ++x)
 	{
 		in_out_pixel_t currentPixel;
-		float u, v, w;
+		float lambda1, lambda2, lambda3;
 
 		// For each Pixel we draw, we first Calculate the Barycentric Coordinates
 		// https://en.wikipedia.org/wiki/Barycentric_coordinate_system
 		// Which are helpful for interpolation inside the Triangle
+		
+		calculateBarycentric(x, y, tris, &lambda1, &lambda2, &lambda3);
 
-		calculateBarycentric(xx, y, tris, &u, &v, &w);
-
-		currentPixel.x = xx;
+		currentPixel.x = x;
 		currentPixel.y = y;
 
-		// We can then interpolate the Color across the Triangle, as well as the 
-		// actual u and v texture mapping
-		currentPixel.color.r = tris[0].color.r * u + tris[1].color.r * v + tris[2].color.r * w;
-		currentPixel.color.g = tris[0].color.g * u + tris[1].color.g * v + tris[2].color.g * w;
-		currentPixel.color.b = tris[0].color.b * u + tris[1].color.b * v + tris[2].color.b * w;
+		// We can then interpolate the Color, uv and z coordinate across the Triangle
+		currentPixel.color.r = tris[0].color.r * lambda1 + tris[1].color.r * lambda2 + tris[2].color.r * lambda3;
+		currentPixel.color.g = tris[0].color.g * lambda1 + tris[1].color.g * lambda2 + tris[2].color.g * lambda3;
+		currentPixel.color.b = tris[0].color.b * lambda1 + tris[1].color.b * lambda2 + tris[2].color.b * lambda3;
+		currentPixel.color.a = tris[0].color.a * lambda1 + tris[1].color.a * lambda2 + tris[2].color.a * lambda3;
 
-		currentPixel.u = tris[0].u * u + tris[1].u * v + tris[2].u * w;
-		currentPixel.v = tris[0].v * u + tris[1].v * v + tris[2].v * w;
+		currentPixel.z = tris[0].z * lambda1 + tris[1].z * lambda2 + tris[2].z * lambda3;
+		currentPixel.w = tris[0].w * lambda1 + tris[1].w * lambda2 + tris[2].w * lambda3;
+
+		// Moving back to Screen-Affine Space
+		currentPixel.u = (tris[0].u * lambda1 + tris[1].u * lambda2 + tris[2].u * lambda3) / currentPixel.w;
+		currentPixel.v = (tris[0].v * lambda1 + tris[1].v * lambda2 + tris[2].v * lambda3) / currentPixel.w;
+
+
+		// You might notice that our Texture is "distorted" once the Triangle rotates. This is due
+		// the fact that we are working with an affine Transformation for our Texture coordinates
+		// (the typical Playstation 1 look) yet do a perspective Transformation on the triangle itself.
+		// I've left it affine for simplicity and the fact that we don't do a real Projection (which is needed).
+		// You can read more about it here:
+		// https://en.wikipedia.org/wiki/Texture_mapping
 
 		// We feed this Pixel information into the Pixel Shader
 		currentPixel = g_sGLPixelShader(currentPixel);
@@ -293,6 +379,7 @@ void sGLFillBottomFlatTriangle(int * xx, int * yy, in_out_pixel_t * tris)
 	}
 }
 
+
 void sGLDrawElements(int count)
 {
 	// We loop each Triangle we need to draw
@@ -307,19 +394,26 @@ void sGLDrawElements(int count)
 
 			currentVertex = g_sGLVertexShader(g_sGLVertexBuffer[g_sGLBoundBuffer][i * 3 + j]);
 
+			// Transform the float coordinates to int's for the screen
 			verts[j].x = (int)(((currentVertex.x + 1.0f) / 2.0f) * (float)g_sGLBackbufferWidth);
 			verts[j].y = (int)((1.0f - ((currentVertex.y + 1.0f) / 2.0f)) * (float)g_sGLBackbufferHeight);
+
+			// For perspective correct Texture mapping, we need: (i.e. moving to Object-Affine Space)
+			verts[j].u = currentVertex.u * currentVertex.w;
+			verts[j].v = currentVertex.v * currentVertex.w;
+
+			// We can copy the rest directly
 			verts[j].z = currentVertex.z;
+			verts[j].w = currentVertex.w;
 			verts[j].color = currentVertex.color;
-			verts[j].u = currentVertex.u;
-			verts[j].v = currentVertex.v;
+
 		}
 		
 		// And then Scanline every Pixel that needs to be drawn
 		// See - sGLScanLine - for Continuation
 
 		// Scanline Algorithm taken from http://www.sunshine2k.de/coding/java/TriangleRasterization/TriangleRasterization.html
-		// You can go there for a detailed description of what happens below
+		// You can check there for a detailed description of what happens below
 
 		int xx[3];
 		int yy[3];
@@ -379,23 +473,20 @@ void sGLSwapBuffers()
 }
 
 
-
 void sGLClear()
 {
 	for (int i = 0; i < g_sGLBackbufferHeight; ++i)
 	{
 		for (int j = 0; j < g_sGLBackbufferWidth; ++j)
 		{	
-			// Let's clear the Backbuffer to a white Color: 255, 255, 255(, 255)
-			g_sGLBackBuffer[i * g_sGLBackbufferWidth + j] = 0xffffff;
+			// Let's clear the Backbuffer to a white Color
+			g_sGLBackBuffer[i * g_sGLBackbufferWidth + j] = color_t(1.0f, 1.0f, 1.0f);
 
 			// And the Depth Buffer to the Set value
 			g_sGLDepthBuffer[i * g_sGLBackbufferWidth + j] = g_sGLDepthClear;
 		}
 	}
 }
-
-
 
 
 void sGLExit()
