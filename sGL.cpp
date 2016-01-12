@@ -3,6 +3,9 @@
 // SDL2 is _ONLY_ used to draw the Backbuffer on the Screen.
 // Everything "3D" is done in our Software Rasterizer "sGL" below
 
+// You can find the Article to this Source Code on Gamasutra:
+// http://gamasutra.com/blogs/MichaelKissner/20160112/263097/Writing_a_Game_Engine_from_Scratch__Part_4_Graphics_Library.php
+
 // NOTE: This is not meant to run at any usable Framerate!
 
 // - Michael Kissner (@Spellwrath)
